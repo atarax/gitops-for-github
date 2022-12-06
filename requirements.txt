@@ -1,0 +1,4 @@
+deepdiff >=6.2.1
+PyGithub >=1.57
+PyYAML >=5.4.1
+tqdm >=4.64.1

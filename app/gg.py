@@ -2,7 +2,6 @@ import logging
 import os
 
 from github import Github
-
 from manager import PermissionManager
 
 loglevel = os.environ.get("LOGLEVEL", "INFO").upper()
