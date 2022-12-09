@@ -27,7 +27,7 @@ def init_github(org_name):
     return g, org
 
 
-if __name__ == "__main__":
+def main():
     import argparse
 
     parser = argparse.ArgumentParser(

@@ -1,1 +1,7 @@
 __pycache__/
+app/build/
+app/gg_wrap.c
+app/gg_wrap.cpython-39-x86_64-linux-gnu.so
+app/manager.c
+app/manager.cpython-39-x86_64-linux-gnu.so
+
