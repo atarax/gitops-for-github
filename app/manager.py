@@ -14,7 +14,7 @@ logging.basicConfig(
     level=loglevel,
     datefmt="%Y-%m-%d %H:%M:%S",
 )
-logger = logging.getLogger("gpm")
+logger = logging.getLogger("gg")
 
 tqdm_disable = False if logging.root.level <= logging.INFO else True
 
@@ -72,7 +72,7 @@ class PermissionManager:
         }
 
     def get_existing_permissions(self, repo_whitelist=[]):
-        logger.info("Initializing repos")
+        logger.info("Initializing repositories")
         repos = [
             r
             for r in tqdm(self.rate_limited(self.org.get_repos), disable=tqdm_disable)

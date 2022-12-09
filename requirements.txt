@@ -1,5 +1,6 @@
 Cython >=0.29.32
 deepdiff >=6.2.1
+kopf >=1.36.0
 PyGithub >=1.57
 PyYAML >=5.4.1
 tqdm >=4.64.1
