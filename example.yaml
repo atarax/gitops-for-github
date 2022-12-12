@@ -1,0 +1,11 @@
+apiVersion: gg.dev/v1
+kind: Repository
+metadata:
+  name: your-repo
+spec:
+  permissions:
+    teams:
+      teama: pull
+      teamb: push
+    users:
+      usera: admin

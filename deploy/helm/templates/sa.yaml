@@ -2,12 +2,12 @@
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: gg-sa
+  name: {{ include "gg.serviceAccountName" . }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: kopfexample-role-cluster
+  name: {{ include "gg.fullname" . }}-role-cluster
 rules:
 
   # Framework: runtime observation of namespaces & CRDs (addition/deletion).
@@ -24,14 +24,14 @@ rules:
     verbs: [create, patch]
 
   # Application: read-only access for watching cluster-wide.
-  - apiGroups: [kopf.dev]
-    resources: [githubpermissionmaps]
-    verbs: [list, watch]
+  - apiGroups: [gg.dev]
+    resources: [repositories]
+    verbs: [list, watch, patch]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: kopfexample-role-namespaced
+  name: {{ include "gg.fullname" . }}-role
 rules:
 
   # Framework: posting the events about the handlers progress/errors.
@@ -40,32 +40,32 @@ rules:
     verbs: [create]
 
   # Application: watching & handling for the custom resource we declare.
-  - apiGroups: [kopf.dev]
-    resources: [githubpermissionmaps]
+  - apiGroups: [gg.dev]
+    resources: [repositories]
     verbs: [list, watch, patch]
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: kopfexample-rolebinding-cluster
+  name: {{ include "gg.fullname" . }}-rb-cluster
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: kopfexample-role-cluster
+  name: {{ include "gg.fullname" . }}-role-cluster
 subjects:
   - kind: ServiceAccount
-    name: gg-sa
-    namespace: default
+    name: {{ include "gg.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: kopfexample-rolebinding-namespaced
+  name: {{ include "gg.fullname" . }}-rb
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: kopfexample-role-namespaced
+  name: {{ include "gg.fullname" . }}-role
 subjects:
   - kind: ServiceAccount
-    name: gg-sa
+    name: {{ include "gg.serviceAccountName" . }}

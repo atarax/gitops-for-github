@@ -20,6 +20,8 @@ tqdm_disable = False if logging.root.level <= logging.INFO else True
 
 
 class PermissionManager:
+    escalations = ["admin", "maintain", "push", "triage", "pull"]
+
     def __init__(self, g, org):
         self.g = g
         self.org = org
@@ -37,10 +39,14 @@ class PermissionManager:
 
         return fn(*args, **kwargs)
 
-    def parse_permissions(self, permissions):
-        escalation = ["admin", "maintain", "push", "triage", "pull"]
+    def validate_item(self, item):
+        if item not in self.escalations:
+            raise InvalidPermissionException(
+                f"{item} should be one of: {self.escalations}"
+            )
 
-        for level in escalation:
+    def parse_permissions(self, permissions):
+        for level in self.escalations:
             if getattr(permissions, level):
                 return level
 
@@ -134,6 +140,8 @@ class PermissionManager:
         return matches.group(1), None, None
 
     def upsert_item(self, item, entity, category, repo_name):
+        self.validate_item(item)
+
         if category == "teams":
             team = self.rate_limited(self.org.get_team_by_slug, entity)
             self.rate_limited(
@@ -200,6 +208,12 @@ class PermissionManager:
         if "dictionary_item_added" in diff:
             for to_add in diff["dictionary_item_added"]:
                 repo, category, entity = self.parse_diff(to_add)
+
+                if category is None:
+                    raise RepositoryNotFoundException(
+                        f"Repository: {repo} does not exist!"
+                    )
+
                 item = desired_permissions[repo][category][entity]
 
                 logger.info(
@@ -243,3 +257,11 @@ class PermissionManager:
                     logger.info(f"[{repo}] Truncate (all){dry_run_suffix}")
                     if not dry_run:
                         self.truncate_all_permissions(repo)
+
+
+class RepositoryNotFoundException(Exception):
+    pass
+
+
+class InvalidPermissionException(Exception):
+    pass
