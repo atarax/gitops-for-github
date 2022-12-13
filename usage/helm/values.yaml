@@ -1,0 +1,11 @@
+nameOverride: ""
+fullnameOverride: ""
+
+permissions: {}
+#  my-repo:
+#    teams:
+#      teama: pull
+#      teama: push
+#    users:
+#      usera: maintain
+#      userb: admin

@@ -1,0 +1,11 @@
+{{- range $repoName, $permissions := .Values.permissions }}
+apiVersion: gg.dev/v1
+kind: Repository
+metadata:
+  name: {{ $repoName }}
+  labels:
+    {{- include "gg-control.labels" $ | nindent 4 }}
+spec: 
+  permissions:
+    {{- toYaml $permissions | nindent 4 }}
+{{- end }}
