@@ -1,5 +1,5 @@
 githubOrg: test
-githubSecret: github-token
+githubSecret: github-secret
 
 image:
   repository: atarax/gg

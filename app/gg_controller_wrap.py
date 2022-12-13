@@ -1,7 +1,11 @@
+import datetime as dt
 import logging
 import os
+import time
 
+import jwt
 import kopf
+import requests
 from github import Github
 from kopf._core.reactor import running
 from manager import PermissionManager
@@ -17,10 +21,8 @@ logger = logging.getLogger("gg")
 tqdm_disable = False if logging.root.level <= logging.INFO else True
 
 MANAGER = None
-
-
-class RepoNotFoundException(kopf.PermanentError):
-    pass
+SETTINGS = None
+TOKEN_INFO = {"token": None, "expires_at": "1900-01-01T00:00:00Z"}
 
 
 def main():
@@ -32,23 +34,76 @@ def main():
     return running.run(clusterwide=True)
 
 
-def init():
-    token = os.getenv("GITHUB_TOKEN", None)
-    if token is None:
-        raise Exception("`GITHUB_TOKEN` must be set in environment")
+def startup(**kwargs):
+    global SETTINGS
 
-    org_name = os.getenv("GITHUB_ORG", None)
-    if org_name is None:
-        raise Exception("`GITHUB_ORG` must be set in environment")
+    SETTINGS = get_config()
+    refresh_manager_token(SETTINGS)
 
-    dry_run = os.getenv("GG_DRY_RUN", False)
+    redacted = SETTINGS.copy()
+    redacted["private_key"] = "..."
+
+    logging.info(f"Running with settings: {redacted}")
+    logging.info("Controller startup finished")
+
+
+def require_env(name):
+    value = os.getenv(name, None)
+    if value is None:
+        raise BootException(f"`{name}` must be set in environment")
+
+    return value
+
+
+def get_config():
+    return {
+        "app_id": int(require_env("GITHUB_APP_ID")),
+        "installation_id": require_env("GITHUB_APP_INSTALLATION_ID"),
+        "private_key": require_env("GITHUB_APP_PRIVATE_KEY"),
+        "org_name": require_env("GITHUB_ORG"),
+        "dry_run": os.getenv("GG_DRY_RUN", False),
+    }
+
+
+def create_jwt(app_id, private_key):
+    now = int(time.time())
+    exp = now + 10 * 60
+    payload = {"iss": int(app_id), "iat": now, "exp": exp}
+    token = jwt.encode(payload, private_key, algorithm="RS256")
+
+    return token
+
+
+def create_access_token(installation_id, jwt_token):
+    resp = requests.post(
+        f"https://api.github.com/app/installations/{installation_id}/access_tokens",
+        headers={
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {jwt_token}",
+        },
+    )
+
+    return resp.json()
+
+
+def refresh_manager_token(settings):
+    global MANAGER, TOKEN_INFO
+
+    now = int(time.time())
+    diff_to_exp = (
+        now - dt.datetime.fromisoformat(TOKEN_INFO["expires_at"][0:-1]).timestamp()
+    )
+    # 10 minutes
+    if diff_to_exp > 60 * 10:
+        jwt_token = create_jwt(SETTINGS["app_id"], SETTINGS["private_key"])
+        TOKEN_INFO = create_access_token(SETTINGS["installation_id"], jwt_token)
+        logging.info("Refreshed github access-token")
 
     # 100 results per page is max setting
-    g = Github(token, per_page=100)
-    org = g.get_organization(org_name)
+    g = Github(TOKEN_INFO["token"], per_page=100)
+    org = g.get_organization(SETTINGS["org_name"])
 
-    manager = PermissionManager(g, org)
-    return manager, dry_run
+    MANAGER = PermissionManager(g, org)
 
 
 def parse_body(body):
@@ -58,13 +113,6 @@ def parse_body(body):
         {body["metadata"]["name"]: body["spec"]["permissions"]},
         body["spec"]["dryRun"] if "dryRun" in body["spec"] else False,
     )
-
-
-def startup(**kwargs):
-    global MANAGER, DRY_RUN
-    MANAGER, DRY_RUN = init()
-    logging.info(f"dry-run: {DRY_RUN}")
-    logging.info("Controller startup finished")
 
 
 def create(body, **kwargs):
@@ -83,11 +131,25 @@ def delete(body, **kwargs):
 
 
 def reconcile(desired_permissions, dry_run, repo):
+    # global dry-run settings overwrite resource-level setting
+    dry_run = dry_run or SETTINGS["dry_run"]
+
+    # rotate token if necessary
+    refresh_manager_token(SETTINGS)
+
     try:
-        MANAGER.reconcile(desired_permissions, DRY_RUN or dry_run, [repo])
-        return {"success": True, "dryRun": DRY_RUN or dry_run, "reason": ""}
+        MANAGER.reconcile(desired_permissions, dry_run, [repo])
+        return {"success": True, "dryRun": dry_run, "reason": ""}
     except Exception as e:
         reason = e.__class__.__name__ + ": " + str(e)
-        logging.info(f"Reconcile failed for '{repo}': {reason}")
+        logging.error(f"Reconcile failed for '{repo}': {reason}")
 
-        return {"success": False, "dryRun": DRY_RUN or dry_run, "reason": reason}
+        return {"success": False, "dryRun": dry_run, "reason": reason}
+
+
+class RepoNotFoundException(kopf.PermanentError):
+    pass
+
+
+class BootException(kopf.PermanentError):
+    pass

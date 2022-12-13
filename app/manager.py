@@ -71,7 +71,9 @@ class PermissionManager:
         return {
             repo: permissions
             for repo, permissions in {
-                r.name: {c.name: c.permission for c in self.rate_limited(r.get_teams)}
+                r.name: {
+                    c.name.lower(): c.permission for c in self.rate_limited(r.get_teams)
+                }
                 for r in tqdm(repos, disable=tqdm_disable)
             }.items()
             if permissions
