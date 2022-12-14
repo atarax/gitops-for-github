@@ -36,6 +36,8 @@ spec:
           env:
             - name: GITHUB_ORG
               value: {{ .Values.githubOrg }}
+            - name: GG_DRY_RUN
+              value: {{ .Values.dryRun | quote }}
           envFrom:
             - secretRef:
                 name: {{ .Values.githubSecret }}

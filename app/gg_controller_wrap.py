@@ -1,4 +1,3 @@
-import datetime as dt
 import logging
 import os
 import time
@@ -22,7 +21,6 @@ tqdm_disable = False if logging.root.level <= logging.INFO else True
 
 MANAGER = None
 SETTINGS = None
-TOKEN_INFO = {"token": None, "expires_at": "1900-01-01T00:00:00Z"}
 
 
 def main():
@@ -30,6 +28,7 @@ def main():
     kopf.on.create("gg.dev", "v1", "repositories", id="create")(create)
     kopf.on.update("gg.dev", "v1", "repositories", id="update")(update)
     kopf.on.delete("gg.dev", "v1", "repositories", id="delete")(delete)
+    kopf.timer("gg.dev", "v1", "repositories", id="reconcile", interval=600)(timer)
 
     return running.run(clusterwide=True)
 
@@ -38,7 +37,6 @@ def startup(**kwargs):
     global SETTINGS
 
     SETTINGS = get_config()
-    refresh_manager_token(SETTINGS)
 
     redacted = SETTINGS.copy()
     redacted["private_key"] = "..."
@@ -86,24 +84,15 @@ def create_access_token(installation_id, jwt_token):
     return resp.json()
 
 
-def refresh_manager_token(settings):
-    global MANAGER, TOKEN_INFO
-
-    now = int(time.time())
-    diff_to_exp = (
-        now - dt.datetime.fromisoformat(TOKEN_INFO["expires_at"][0:-1]).timestamp()
-    )
-    # 10 minutes
-    if diff_to_exp > 60 * 10:
-        jwt_token = create_jwt(SETTINGS["app_id"], SETTINGS["private_key"])
-        TOKEN_INFO = create_access_token(SETTINGS["installation_id"], jwt_token)
-        logging.info("Refreshed github access-token")
+def get_manager():
+    jwt_token = create_jwt(SETTINGS["app_id"], SETTINGS["private_key"])
+    token_info = create_access_token(SETTINGS["installation_id"], jwt_token)
 
     # 100 results per page is max setting
-    g = Github(TOKEN_INFO["token"], per_page=100)
+    g = Github(token_info["token"], per_page=100, pool_size=100)
     org = g.get_organization(SETTINGS["org_name"])
 
-    MANAGER = PermissionManager(g, org)
+    return PermissionManager(g, org, tqdm_disable=True)
 
 
 def parse_body(body):
@@ -130,15 +119,20 @@ def delete(body, **kwargs):
     return reconcile({repo: {}}, dry_run, repo)
 
 
+def timer(body, **kwargs):
+    repo, desired_permissions, dry_run = parse_body(body)
+    return reconcile(desired_permissions, dry_run, repo)
+
+
 def reconcile(desired_permissions, dry_run, repo):
     # global dry-run settings overwrite resource-level setting
     dry_run = dry_run or SETTINGS["dry_run"]
 
     # rotate token if necessary
-    refresh_manager_token(SETTINGS)
+    manager = get_manager()
 
     try:
-        MANAGER.reconcile(desired_permissions, dry_run, [repo])
+        manager.reconcile(desired_permissions, dry_run, [repo])
         return {"success": True, "dryRun": dry_run, "reason": ""}
     except Exception as e:
         reason = e.__class__.__name__ + ": " + str(e)

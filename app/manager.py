@@ -16,15 +16,19 @@ logging.basicConfig(
 )
 logger = logging.getLogger("gg")
 
-tqdm_disable = False if logging.root.level <= logging.INFO else True
-
 
 class PermissionManager:
     escalations = ["admin", "maintain", "push", "triage", "pull"]
 
-    def __init__(self, g, org):
+    def __init__(self, g, org, tqdm_disable=False):
         self.g = g
         self.org = org
+
+        # if disabled explicitly, make it disabled, otherwise rely
+        # on loglevel
+        self.tqdm_disable = tqdm_disable
+        if not tqdm_disable:
+            self.tqdm_disable = False if logging.root.level <= logging.INFO else True
 
     def rate_limited(self, fn, *args, **kwargs):
         requests_left = self.g.rate_limiting[0]
@@ -52,7 +56,7 @@ class PermissionManager:
 
         raise Exception("Illegal permissions-object")
 
-    def get_user_collaborators(self, repos, tqdm_disable=tqdm_disable):
+    def get_user_collaborators(self, repos, tqdm_disable):
         return {
             repo: permissions
             for repo, permissions in {
@@ -62,36 +66,43 @@ class PermissionManager:
                         r.get_collaborators, affiliation="direct"
                     )
                 }
-                for r in tqdm(repos, disable=tqdm_disable)
+                for r in tqdm(repos, disable=self.tqdm_disable)
             }.items()
             if permissions
         }
 
-    def get_team_collaborators(self, repos, tqdm_disable=tqdm_disable):
+    def get_team_collaborators(self, repos, tqdm_disable):
         return {
             repo: permissions
             for repo, permissions in {
                 r.name: {
                     c.name.lower(): c.permission for c in self.rate_limited(r.get_teams)
                 }
-                for r in tqdm(repos, disable=tqdm_disable)
+                for r in tqdm(repos, disable=self.tqdm_disable)
             }.items()
             if permissions
         }
 
     def get_existing_permissions(self, repo_whitelist=[]):
-        logger.info("Initializing repositories")
+        # progress-bar related output
+        if not self.tqdm_disable:
+            logger.info("Initializing repositories")
+
         repos = [
             r
-            for r in tqdm(self.rate_limited(self.org.get_repos), disable=tqdm_disable)
+            for r in tqdm(
+                self.rate_limited(self.org.get_repos), disable=self.tqdm_disable
+            )
             if r.name in repo_whitelist or len(repo_whitelist) == 0
         ]
 
-        logger.info("Loading user permissions")
-        user_collaborators = self.get_user_collaborators(repos)
+        if not self.tqdm_disable:
+            logger.info("Loading user permissions")
+        user_collaborators = self.get_user_collaborators(repos, self.tqdm_disable)
 
-        logger.info("Loading team permissions")
-        team_collaborators = self.get_team_collaborators(repos)
+        if not self.tqdm_disable:
+            logger.info("Loading team permissions")
+        team_collaborators = self.get_team_collaborators(repos, self.tqdm_disable)
 
         collaborators = {
             repo.name: {
@@ -231,7 +242,7 @@ class PermissionManager:
                 current = existing_permissions[repo][category][entity]
 
                 logger.info(
-                    f"[{repo}] Updating `{item}` - Current: `{current}`{dry_run_suffix}"
+                    f"[{repo}] Updating `{item}` for {entity} - Current: `{current}`{dry_run_suffix}"
                 )
                 if not dry_run:
                     self.upsert_item(item, entity, category, repo)
