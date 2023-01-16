@@ -116,6 +116,10 @@ def update(body, **kwargs):
 
 def delete(body, **kwargs):
     repo, _, dry_run = parse_body(body)
+
+    # global dry-run settings overwrite resource-level setting
+    dry_run = dry_run or SETTINGS["dry_run"]
+
     return reconcile({repo: {}}, dry_run, repo)
 
 
