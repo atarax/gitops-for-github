@@ -25,6 +25,8 @@ spec:
               properties:
                 dryRun:
                   type: boolean
+                externalName:
+                  type: string
                 permissions:
                   type: object
                   properties:

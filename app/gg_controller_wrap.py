@@ -97,9 +97,15 @@ def get_manager():
 
 def parse_body(body):
     # repo, permissions, dry-run
+    repo_name = (
+        body["spec"]["externalName"]
+        if "externalName" in body["spec"]
+        else body["metadata"]["name"]
+    )
+
     return (
-        body["metadata"]["name"],
-        {body["metadata"]["name"]: body["spec"]["permissions"]},
+        repo_name,
+        {repo_name: body["spec"]["permissions"]},
         body["spec"]["dryRun"] if "dryRun" in body["spec"] else False,
     )
 

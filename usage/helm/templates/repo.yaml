@@ -1,12 +1,16 @@
 {{- range $repoName, $permissions := .Values.permissions }}
+{{- $sanRepoName := regexReplaceAll "_" $repoName "-" }}
+---
 apiVersion: gg.dev/v1
 kind: Repository
 metadata:
-  name: {{ $repoName }}
+  name: {{ $sanRepoName }}
   labels:
     {{- include "gg-control.labels" $ | nindent 4 }}
 spec: 
+  {{- if regexMatch "_" $repoName }}
+  externalName: {{ $repoName }}
+  {{- end }}
   permissions:
     {{- toYaml $permissions | nindent 4 }}
----
 {{- end }}
